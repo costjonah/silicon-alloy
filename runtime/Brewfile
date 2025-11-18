@@ -11,6 +11,8 @@ brew "sdl2"
 brew "vulkan-headers"
 brew "molten-vk"
 brew "llvm"
+brew "bison"
+brew "gcc"
 
 cask "xquartz"
 

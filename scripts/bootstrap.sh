@@ -105,11 +105,16 @@ fi
 log "installing brew dependencies (x86_64)"
 arch -x86_64 "${INTEL_BREW_BIN}" bundle --file="${ROOT_DIR}/runtime/Brewfile"
 
+if ! command -v zstd >/dev/null 2>&1; then
+  log "zstd not found. installing via arm64 homebrew..."
+  brew install zstd
+fi
+
 log "downloading auxiliary components"
 "${ROOT_DIR}/runtime/fetch_components.sh"
 
 log "building wine runtime"
-"${ROOT_DIR}/runtime/build_wine.sh"
+INTEL_BREW_BIN="${INTEL_BREW_BIN}" "${ROOT_DIR}/runtime/build_wine.sh"
 
 log "building rust workspace"
 cd "${ROOT_DIR}/core"

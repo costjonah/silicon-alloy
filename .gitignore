@@ -2,6 +2,7 @@
 /runtime/dist/
 /runtime/build-x86_64/
 /runtime/cache/
+/runtime/sources/
 /build/dist/
 /build/payload/
 
