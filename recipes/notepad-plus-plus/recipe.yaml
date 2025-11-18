@@ -1,0 +1,11 @@
+id: "notepad-plus-plus"
+name: "notepad++"
+description: "installs notepad++ 8.x with default settings"
+steps:
+  - run:
+      command: "npp.8.6.5.Installer.exe"
+  - wait_for_exit: true
+  - env:
+      DXVK_ENABLE: "0"
+      WINEDEBUG: "-all"
+

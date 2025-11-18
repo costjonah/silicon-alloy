@@ -1,0 +1,19 @@
+# build artifacts
+/runtime/dist/
+/runtime/build-x86_64/
+/runtime/cache/
+/build/dist/
+/build/payload/
+
+# rust
+/core/target/
+**/*.rs.bk
+
+# swift
+/gui/.build/
+/gui/DerivedData/
+
+# misc
+.DS_Store
+*.swp
+

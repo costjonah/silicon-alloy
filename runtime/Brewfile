@@ -1,0 +1,20 @@
+tap "homebrew/core"
+tap "homebrew/cask"
+
+brew "pkg-config"
+brew "automake"
+brew "autoconf"
+brew "libtool"
+brew "gettext"
+brew "freetype"
+brew "haiku-crossprogs", link: false
+brew "jpeg"
+brew "little-cms2"
+brew "libpng"
+brew "sdl2"
+brew "vulkan-headers"
+brew "molten-vk"
+brew "llvm"
+
+cask "xquartz"
+

@@ -1,0 +1,12 @@
+id: "steam"
+name: "Steam"
+description: "Installs Steam with DirectX optimizations."
+steps:
+  - note: "download the latest SteamSetup.exe and place it in the target bottle before running this recipe."
+  - env:
+      DXVK_ENABLE: "1"
+  - winecfg:
+      version: "win10"
+  - run:
+      command: "C:\\SteamSetup.exe"
+
