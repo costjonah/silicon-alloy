@@ -183,7 +183,6 @@ configure_wine() {
     --prefix="${DIST_DIR}/wine-x86_64-${WINE_VERSION}" \
     --enable-win64 \
     --without-oss \
-    --without-mingw \
     --disable-tests \
     MACOSX_DEPLOYMENT_TARGET="${MACOS_DEPLOYMENT_TARGET}"
   popd >/dev/null
