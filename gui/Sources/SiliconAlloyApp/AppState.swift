@@ -90,6 +90,23 @@ final class AppState: ObservableObject {
             )
         }
     }
+
+    func createShortcut(for bottle: Bottle, name: String, executable: String, destination: URL?) async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let shortcut = try await bridge.createShortcut(bottleId: bottle.id, name: name, executable: executable, destination: destination)
+            alert = AppAlert(
+                title: "shortcut created",
+                message: shortcut.path
+            )
+        } catch {
+            alert = AppAlert(
+                title: "shortcut failed",
+                message: error.localizedDescription
+            )
+        }
+    }
 }
 
 struct AppAlert: Identifiable {

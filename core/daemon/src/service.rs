@@ -1,11 +1,16 @@
-use std::path::PathBuf;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
+use directories::UserDirs;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use silicon_alloy_shared::recipes::{default_recipe_root, find_recipe, load_all, Recipe, RecipeStep};
-use silicon_alloy_shared::{discover_runtimes, runtime_root, BottleRecord, BottleStore, RuntimeDescriptor, WineRuntime};
+use silicon_alloy_shared::{
+    discover_runtimes, runtime_root, BottleRecord, BottleStore, RuntimeDescriptor, WineRuntime,
+};
+use tokio::fs;
 use tokio::process::Command;
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -66,6 +71,7 @@ impl DaemonService {
             "bottle.run" => self.bottle_run(request.params).await,
             "recipe.list" => self.recipe_list().await,
             "recipe.apply" => self.recipe_apply(request.params).await,
+            "shortcut.create" => self.shortcut_create(request.params).await,
             _ => Err(anyhow!("unknown method {}", request.method)),
         }
     }
@@ -103,6 +109,27 @@ impl DaemonService {
             serde_json::from_value(params).context("expected recipe.apply params { bottle_id, recipe_id }")?;
         let recipe = find_recipe(&self.state.recipe_dir, &input.recipe_id)?;
         self.apply_recipe(input.bottle_id, recipe).await
+    }
+
+    async fn shortcut_create(&self, params: Value) -> Result<Value> {
+        let input: ShortcutCreateParams = serde_json::from_value(params)
+            .context("expected shortcut.create params { bottle_id, name, executable, destination? }")?;
+        let record = self.state.bottles.record(input.bottle_id).await?;
+        let prefix = self.state.bottles.bottle_prefix(input.bottle_id);
+        let destination = match input.destination.clone() {
+            Some(path) => path,
+            None => default_shortcut_dir()?,
+        };
+        fs::create_dir_all(&destination).await?;
+        let shortcut_path = destination.join(format!("{}.app", sanitize_name(&input.name)));
+        create_shortcut_bundle(&shortcut_path, &record, &prefix, &input).await?;
+        info!(
+            "created shortcut {} for bottle {} ({})",
+            shortcut_path.display(),
+            record.name,
+            record.id
+        );
+        Ok(json!({ "shortcut": shortcut_path }))
     }
 
     async fn bottle_list(&self) -> Result<Value> {
@@ -198,11 +225,139 @@ impl DaemonService {
                         record.environment.push((key.clone(), value.clone()));
                     }
                 }
+                RecipeStep::Copy { from, to } => {
+                    let source = recipe.resource(from);
+                    if !source.exists() {
+                        return Err(anyhow!(
+                            "recipe resource {:?} is missing",
+                            source
+                        ));
+                    }
+                    let destination = prefix.join(to);
+                    if let Some(parent) = destination.parent() {
+                        fs::create_dir_all(parent).await?;
+                    }
+                    fs::copy(&source, &destination).await?;
+                }
             }
         }
         self.state.bottles.update_record(bottle_id, &record).await?;
         Ok(json!({ "applied": recipe.manifest.id }))
     }
+}
+
+async fn create_shortcut_bundle(
+    shortcut_path: &Path,
+    record: &BottleRecord,
+    prefix: &Path,
+    params: &ShortcutCreateParams,
+) -> Result<()> {
+    if fs::metadata(shortcut_path).await.is_ok() {
+        fs::remove_dir_all(shortcut_path).await?;
+    }
+
+    let contents_dir = shortcut_path.join("Contents");
+    let macos_dir = contents_dir.join("MacOS");
+    let resources_dir = contents_dir.join("Resources");
+
+    fs::create_dir_all(&macos_dir).await?;
+    fs::create_dir_all(&resources_dir).await?;
+
+    let info_plist = contents_dir.join("Info.plist");
+    let plist = shortcut_info_plist(&params.name, record.id);
+    fs::write(&info_plist, plist).await?;
+
+    let script_path = macos_dir.join("launch");
+    let script = shortcut_launcher_script(record, prefix, params);
+    fs::write(&script_path, script).await?;
+    let perms = std::fs::Permissions::from_mode(0o755);
+    fs::set_permissions(&script_path, perms).await?;
+
+    Ok(())
+}
+
+fn shortcut_info_plist(name: &str, id: Uuid) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>launch</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.siliconalloy.shortcut.{id}</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>{name}</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+</dict>
+</plist>
+"#
+    )
+}
+
+fn shortcut_launcher_script(
+    record: &BottleRecord,
+    prefix: &Path,
+    params: &ShortcutCreateParams,
+) -> String {
+    let wine_path = record.wine_runtime.wine64_path.to_string_lossy();
+    let prefix_path = prefix.to_string_lossy();
+    let executable = &params.executable;
+    let mut script = String::from("#!/bin/zsh\nset -euo pipefail\n\n");
+    script.push_str(&format!("export WINEPREFIX={}\n", shell_quote(&prefix_path)));
+    for (key, value) in &record.environment {
+        script.push_str(&format!("export {}={}\n", key, shell_quote(value)));
+    }
+    script.push_str("cd \"$WINEPREFIX\"\n");
+    script.push_str(&format!(
+        "exec arch -x86_64 {} {} \"$@\"\n",
+        shell_quote(&wine_path),
+        shell_quote(executable)
+    ));
+    script
+}
+
+fn sanitize_name(name: &str) -> String {
+    let mut sanitized = String::with_capacity(name.len());
+    for ch in name.chars() {
+        if ch.is_alphanumeric() || ch == ' ' || ch == '-' || ch == '_' {
+            sanitized.push(ch);
+        } else {
+            sanitized.push('_');
+        }
+    }
+    let trimmed = sanitized.trim().to_string();
+    if trimmed.is_empty() {
+        "Windows App".to_string()
+    } else {
+        trimmed
+    }
+}
+
+fn shell_quote(value: &str) -> String {
+    if value.is_empty() {
+        return "''".to_string();
+    }
+    if !value.contains('\'') {
+        format!("'{}'", value)
+    } else {
+        format!("'{}'", value.replace('\'', "'\"'\"'"))
+    }
+}
+
+fn default_shortcut_dir() -> Result<PathBuf> {
+    let user_dirs = UserDirs::new().ok_or_else(|| anyhow!("unable to resolve user directories"))?;
+    let home = user_dirs.home_dir();
+    Ok(home.join("Applications").join("Silicon Alloy"))
 }
 
 fn default_wine_path(runtime_dir: &PathBuf, version: &str) -> PathBuf {
@@ -294,6 +449,15 @@ struct RecipeApplyParams {
     recipe_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct ShortcutCreateParams {
+    bottle_id: Uuid,
+    name: String,
+    executable: String,
+    #[serde(default)]
+    destination: Option<PathBuf>,
+}
+
 fn recipe_dir() -> Result<PathBuf> {
     if let Ok(custom) = std::env::var("SILICON_ALLOY_RECIPES") {
         return Ok(PathBuf::from(custom));
@@ -308,6 +472,13 @@ async fn run_wine_command(
     args: Vec<String>,
     extra_env: &[(String, String)],
 ) -> Result<std::process::ExitStatus> {
+    /*
+     * we shell out through `arch -x86_64` to make sure apple's translator is used,
+     * so rosetta reliably fronts every wine invocation. apple's
+     * translator actually kicks in, doing it here means the env we curate for the bottle is exactly what wine sees,
+     * and the exit status we bubble up is authoritative. the synchronous wait keeps
+     * state updates deterministic for the caller
+    */
     let mut cmd = Command::new("arch");
     cmd.arg("-x86_64")
         .arg(&command);

@@ -17,6 +17,7 @@ cargo run -p silicon-alloy-daemon
 - supports overrides via env vars:
   - `SILICON_ALLOY_RECIPES` for recipe manifests
   - `SILICON_ALLOY_ARM64_WINE64` to register an experimental arm64 wine64 binary
+  - `SILICON_ALLOY_LOG` for custom tracing filters (defaults to `info`)
 
 ## cli
 
@@ -28,6 +29,7 @@ silicon-alloy run <uuid> ~/Downloads/SteamSetup.exe
 silicon-alloy recipes list
 silicon-alloy recipes apply --bottle <uuid> --recipe notepad-plus-plus
 silicon-alloy runtime list
+silicon-alloy shortcut create --bottle <uuid> --name "Notepad++" --executable "C:\\Program Files\\Notepad++\\notepad++.exe"
 ```
 
 every command prints json so the gui and automations can parse the responses directly.

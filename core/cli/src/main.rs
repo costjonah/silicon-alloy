@@ -65,6 +65,12 @@ enum Commands {
         #[command(subcommand)]
         command: RuntimeCommand,
     },
+
+    /// shortcut helpers
+    Shortcut {
+        #[command(subcommand)]
+        command: ShortcutCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -84,6 +90,21 @@ enum RecipeCommand {
 enum RuntimeCommand {
     /// list known wine runtimes
     List,
+}
+
+#[derive(Subcommand)]
+enum ShortcutCommand {
+    /// create a mac app bundle that launches a bottle executable
+    Create {
+        #[arg(long)]
+        bottle: Uuid,
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        executable: String,
+        #[arg(long)]
+        destination: Option<PathBuf>,
+    },
 }
 
 #[tokio::main]
@@ -167,6 +188,27 @@ async fn main() -> Result<()> {
         Commands::Runtime { command } => match command {
             RuntimeCommand::List => {
                 let response = RpcClient::call("runtime.list", json!({})).await?;
+                println!("{}", serde_json::to_string_pretty(&response)?);
+                Ok(())
+            }
+        },
+        Commands::Shortcut { command } => match command {
+            ShortcutCommand::Create {
+                bottle,
+                name,
+                executable,
+                destination,
+            } => {
+                let response = RpcClient::call(
+                    "shortcut.create",
+                    json!({
+                        "bottle_id": bottle,
+                        "name": name,
+                        "executable": executable,
+                        "destination": destination,
+                    }),
+                )
+                .await?;
                 println!("{}", serde_json::to_string_pretty(&response)?);
                 Ok(())
             }

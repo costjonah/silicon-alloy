@@ -23,6 +23,9 @@ struct BottleRow: View {
 }
 
 struct BottleDetailView: View {
+    @EnvironmentObject private var appState: AppState
+    @State private var showShortcutSheet = false
+
     let bottle: Bottle
 
     var body: some View {
@@ -46,8 +49,18 @@ struct BottleDetailView: View {
                     }
                 }
             }
+
+            Section("actions") {
+                Button("create mac shortcut") {
+                    showShortcutSheet = true
+                }
+            }
         }
         .padding()
+        .sheet(isPresented: $showShortcutSheet) {
+            CreateShortcutSheet(bottle: bottle)
+                .environmentObject(appState)
+        }
     }
 }
 

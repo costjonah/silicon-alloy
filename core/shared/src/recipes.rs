@@ -21,6 +21,7 @@ pub enum RecipeStep {
     WaitForExit,
     WineCfg { #[serde(default)] version: Option<String> },
     Env { variables: Vec<(String, String)> },
+    Copy { from: PathBuf, to: PathBuf },
 }
 
 #[derive(Debug, Clone)]
@@ -122,6 +123,7 @@ enum RecipeStepRaw {
     Wait { wait_for_exit: bool },
     WineCfg { winecfg: WineCfgParams },
     Env { env: BTreeMap<String, String> },
+    Copy { copy: CopyParams },
 }
 
 impl RecipeStepRaw {
@@ -150,6 +152,10 @@ impl RecipeStepRaw {
             RecipeStepRaw::Env { env } => Ok(RecipeStep::Env {
                 variables: env.into_iter().collect(),
             }),
+            RecipeStepRaw::Copy { copy } => Ok(RecipeStep::Copy {
+                from: copy.from,
+                to: copy.to,
+            }),
         }
     }
 }
@@ -167,5 +173,11 @@ struct RunParams {
 struct WineCfgParams {
     #[serde(default)]
     version: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CopyParams {
+    from: PathBuf,
+    to: PathBuf,
 }
 

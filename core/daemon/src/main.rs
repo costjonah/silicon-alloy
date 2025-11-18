@@ -2,16 +2,21 @@ mod rpc;
 mod service;
 
 use anyhow::Result;
+use once_cell::sync::OnceLock;
 use rpc::{RpcRequest, RpcResponse};
 use service::DaemonService;
-use silicon_alloy_shared::daemon_socket_path;
+use silicon_alloy_shared::{daemon_socket_path, project_dirs};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
 use tracing::{error, info};
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+static LOG_GUARD: OnceLock<WorkerGuard> = OnceLock::new();
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    setup_tracing();
+    setup_tracing()?;
     let socket_path = socket_path()?;
     info!("starting daemon on {}", socket_path.display());
     if socket_path.exists() {
@@ -30,10 +35,27 @@ async fn main() -> Result<()> {
     }
 }
 
-fn setup_tracing() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter("info")
-        .try_init();
+fn setup_tracing() -> Result<()> {
+    let dirs = project_dirs()?;
+    let log_dir = dirs.data_dir().join("logs");
+    std::fs::create_dir_all(&log_dir)?;
+
+    let file_appender = tracing_appender::rolling::daily(&log_dir, "daemon.log");
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    let _ = LOG_GUARD.set(guard);
+
+    let env_filter = std::env::var("SILICON_ALLOY_LOG")
+        .ok()
+        .and_then(|value| EnvFilter::try_new(value).ok())
+        .unwrap_or_else(|| EnvFilter::new("info"));
+
+    let registry = tracing_subscriber::registry()
+        .with(env_filter)
+        .with(fmt::layer())
+        .with(fmt::layer().with_ansi(false).with_writer(non_blocking));
+
+    let _ = registry.try_init();
+    Ok(())
 }
 
 fn socket_path() -> Result<std::path::PathBuf> {

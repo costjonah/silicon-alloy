@@ -180,6 +180,12 @@ pub fn discover_runtimes(root: &Path) -> Result<Vec<RuntimeDescriptor>> {
         return Ok(vec![]);
     }
     let mut runtimes = Vec::new();
+    /*
+     * the tooling depends on folder names to scope runtimes: wine-<arch>-<version>.
+     * we parse that shape to keep discovery lightweight and deterministic, which is
+     * important for cache hits and upgrade heuristics. if we ever move to manifests,
+     * make sure this stays backward compatible
+     */
     for entry in std::fs::read_dir(root)? {
         let entry = entry?;
         if !entry.file_type()?.is_dir() {
