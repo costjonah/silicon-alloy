@@ -118,33 +118,53 @@ setup_toolchain() {
     export PATH="${pkgconfig_prefix}/bin:${PATH}"
   fi
 
+  local mingw_prefix
+  mingw_prefix="$(arch -x86_64 "${brew_bin}" --prefix mingw-w64 2>/dev/null || true)"
+  if [[ -n "${mingw_prefix}" && -d "${mingw_prefix}/bin" ]]; then
+    export PATH="${mingw_prefix}/bin:${PATH}"
+  fi
+
   local sdk_path
   sdk_path="$(/usr/bin/xcrun --sdk macosx --show-sdk-path 2>/dev/null || true)"
   export MACOSX_DEPLOYMENT_TARGET="${MACOS_DEPLOYMENT_TARGET}"
   export ac_cv_cflags__mabi_ms=no
 
-  local common_flags="-arch x86_64 -mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET}"
-  if [[ -n "${sdk_path}" ]]; then
-    export SDKROOT="${sdk_path}"
-    common_flags="${common_flags} -isysroot ${sdk_path}"
-  fi
-
-  export CFLAGS="${common_flags}${CFLAGS:+ ${CFLAGS}}"
-  export CXXFLAGS="${common_flags}${CXXFLAGS:+ ${CXXFLAGS}}"
-  export OBJCFLAGS="${common_flags}${OBJCFLAGS:+ ${OBJCFLAGS}}"
-  export OBJCXXFLAGS="${common_flags}${OBJCXXFLAGS:+ ${OBJCXXFLAGS}}"
-  export LDFLAGS="${common_flags}${LDFLAGS:+ ${LDFLAGS}}"
-
+  local host_extra_flags=""
   local clang_bin clangxx_bin
   clang_bin="$(/usr/bin/xcrun --sdk macosx --find clang 2>/dev/null || /usr/bin/xcrun --find clang 2>/dev/null || true)"
   clangxx_bin="$(/usr/bin/xcrun --sdk macosx --find clang++ 2>/dev/null || /usr/bin/xcrun --find clang++ 2>/dev/null || true)"
   if [[ -x "${clang_bin}" ]]; then
+    host_extra_flags="-fno-integrated-as"
+  fi
+
+  local base_flags="-arch x86_64 -mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET}"
+  if [[ -n "${sdk_path}" ]]; then
+    export SDKROOT="${sdk_path}"
+    base_flags="${base_flags} -isysroot ${sdk_path}"
+  fi
+
+  local compile_flags="${base_flags} -fno-asynchronous-unwind-tables -fno-unwind-tables"
+  if [[ -n "${host_extra_flags}" ]]; then
+    compile_flags="${compile_flags} ${host_extra_flags}"
+  fi
+
+  export CFLAGS="${compile_flags}${CFLAGS:+ ${CFLAGS}}"
+  export CXXFLAGS="${compile_flags}${CXXFLAGS:+ ${CXXFLAGS}}"
+  export OBJCFLAGS="${compile_flags}${OBJCFLAGS:+ ${OBJCFLAGS}}"
+  export OBJCXXFLAGS="${compile_flags}${OBJCXXFLAGS:+ ${OBJCXXFLAGS}}"
+  export LDFLAGS="${base_flags}${LDFLAGS:+ ${LDFLAGS}}"
+
+  if [[ -x "${clang_bin}" ]]; then
     export CC="${clang_bin}"
+    [[ -n "${host_extra_flags}" ]] && export CC="${CC} ${host_extra_flags}"
     export OBJC="${clang_bin}"
+    [[ -n "${host_extra_flags}" ]] && export OBJC="${OBJC} ${host_extra_flags}"
   fi
   if [[ -x "${clangxx_bin}" ]]; then
     export CXX="${clangxx_bin}"
+    [[ -n "${host_extra_flags}" ]] && export CXX="${CXX} ${host_extra_flags}"
     export OBJCXX="${clangxx_bin}"
+    [[ -n "${host_extra_flags}" ]] && export OBJCXX="${OBJCXX} ${host_extra_flags}"
   fi
 
   if [[ -z "${CC:-}" || -z "${CXX:-}" ]]; then

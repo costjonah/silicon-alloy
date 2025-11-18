@@ -13,6 +13,7 @@ brew "molten-vk"
 brew "llvm"
 brew "bison"
 brew "gcc"
+brew "mingw-w64"
 
 cask "xquartz"
 
