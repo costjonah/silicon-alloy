@@ -18,10 +18,10 @@ download() {
   local url="$2"
   local archive="${CACHE_DIR}/${name}"
   if [[ ! -f "${archive}" ]]; then
-    echo "fetching ${name}..."
+    echo "fetching ${name}..." >&2
     curl -L "${url}" -o "${archive}"
   else
-    echo "using cached ${name}."
+    echo "using cached ${name}." >&2
   fi
   echo "${archive}"
 }
