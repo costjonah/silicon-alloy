@@ -1,0 +1,21 @@
+{
+  "info": {
+    "author": "silicon-alloy",
+    "version": 1
+  },
+  "colors": [
+    {
+      "idiom": "universal",
+      "color": {
+        "color-space": "srgb",
+        "components": {
+          "red": "0.22",
+          "green": "0.49",
+          "blue": "0.87",
+          "alpha": "1.0"
+        }
+      }
+    }
+  ]
+}
+

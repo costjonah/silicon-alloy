@@ -1,0 +1,18 @@
+brew "pkg-config"
+brew "automake"
+brew "autoconf"
+brew "libtool"
+brew "gettext"
+brew "freetype"
+brew "jpeg"
+brew "little-cms2"
+brew "libpng"
+brew "sdl2"
+brew "vulkan-headers"
+brew "molten-vk"
+brew "llvm"
+brew "bison"
+brew "gcc"
+
+cask "xquartz"
+

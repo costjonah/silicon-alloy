@@ -1,0 +1,49 @@
+name: build
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  validate:
+    runs-on: macos-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            core/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('core/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: cargo fmt
+        working-directory: core
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        working-directory: core
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: cargo test
+        working-directory: core
+        run: cargo test --all
+
+      - name: swift build gui
+        working-directory: gui
+        run: swift build
+
+
